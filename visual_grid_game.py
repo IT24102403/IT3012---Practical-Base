@@ -26,6 +26,20 @@ class VisualGridHuntGame:
             if pos_tuple != (0, 0) and pos_tuple not in self.walls:
                 self.food_positions.add(pos_tuple)
 
+        #toxic traps
+        self.toxic_traps = set()
+        num_traps = 5
+
+        while len(self.toxic_traps) < num_traps:
+            tx = random.randint(0, self.width - 1)
+            ty = random.randint(0, self.height - 1)
+            trap_pos = (tx, ty)
+
+            if (trap_pos != (0, 0) and 
+                trap_pos not in self.walls and 
+                trap_pos not in self.food_positions):
+                self.toxic_traps.add(trap_pos)
+
         # Generate adversarial opponents
         self.opponents = []
         while len(self.opponents) < num_opponents:
@@ -45,6 +59,8 @@ class VisualGridHuntGame:
             'opponent_positions': [list(op) for op in self.opponents],
             'smells_food': tuple(self.agent_pos) in self.food_positions,
             'hit_wall': tuple(self.agent_pos) in self.walls,
+            # 2.2 - new boolean sensor key : smells_toxin
+            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
             'collision': self.collision,
             'score': self.score,
             'remaining_food': len(self.food_positions)
@@ -69,6 +85,11 @@ class VisualGridHuntGame:
             self.agent_pos = new_pos
 
         tuple_pos = tuple(self.agent_pos)
+
+        # 2.3 check for toxic traps
+        if tuple_pos in self.toxic_traps:
+            self.score -= 15
+
         if tuple_pos in self.food_positions:
             self.food_positions.remove(tuple_pos)
             self.score += 20
@@ -138,6 +159,23 @@ class GridGameGUI:
                 if self.cell_size >= 40 and (x, y) in self.env.walls:
                     self.canvas.create_text(x1 + self.cell_size / 2, y1 + self.cell_size / 2, text="W", fill="white",
                                             font=("Arial", 8, "bold"))
+
+        # 2.3 draw toxic traps as purple diamonds
+        for tx, ty in self.env.toxic_traps:
+            offset = self.cell_size * 0.25
+            size = self.cell_size * 0.5
+            x1 = tx * self.cell_size + offset
+            y1 = (self.env.height - 1 - ty) * self.cell_size + offset
+
+            self.canvas.create_polygon(
+               x1 + size / 2, y1,   # top point
+               x1 + size, y1 + size / 2,   # Right point
+               x1 + size / 2, y1 + size,   # Bottom point
+               x1, y1 + size / 2,    # Left point
+                fill = "purple",
+                outline="#581c87" 
+            )
+
 
         for fx, fy in self.env.food_positions:
             offset = self.cell_size * 0.25
