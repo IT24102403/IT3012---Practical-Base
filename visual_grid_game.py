@@ -2,6 +2,56 @@
 import random
 import tkinter as tk
 
+class SimpleReflexAgent:
+    """A purely reactive agent that operates on condition-action rules with no memory."""
+    def sense_and_act(self, percept):
+        if percept["food_here"]:
+            return "Suck"
+        elif percept["wall_ahead"]:
+            return "TurnLeft"
+        else:
+            return "MoveForward"
+
+class ModelBasedAgent:
+    def __init__(self):
+        self.visited_cells = set()
+
+        self.x, self.y = 0, 0
+        self.dx, self.dy = 0, 1
+        self.visited_cells.add((self.x, self.y))
+        self.last_action = None
+
+    def sense_and_act(self, percept):
+        # 1. Update State (Transition Model)
+        if self.last_action == "MoveForward":
+            self.x += self.dx
+            self.y += self.dy
+            self.visited_cells.add((self.x, self.y))
+
+        elif self.last_action == "TurnLeft":
+            self.dx, self.dy = -self.dy, self.dx
+
+        elif self.last_action == "TurnRight":
+            self.dx, self.dy = self.dy, -self.dx
+
+        # 2. IF-THEN Rules querying memory
+        if percept["food_here"]:
+            action = "Suck"
+        elif percept["wall_ahead"]:
+            left_dx, left_dy = -self.dy, self.dx
+            left_cell = (self.x + left_dx, self.y + left_dy)
+
+            if self.last_action in ["TurnLeft", "TurnRight"]:
+                action = self.last_action
+            elif left_cell not in self.visited_cells:
+                action = "TurnRight"
+            else:
+                action = "TurnLeft"
+        else:
+            action = "MoveForward"
+
+        self.last_action = action
+        return action
 
 class VisualGridHuntGame:
     """A flexible Pacman-style grid environment with support for configurable opponents and larger scales."""
@@ -10,6 +60,7 @@ class VisualGridHuntGame:
         self.width = width
         self.height = height
         self.agent_pos = [0, 0]  # Starting position (x, y)
+        self.agent_direction = 'Up' # Default direction
 
         if custom_walls is not None:
             self.walls = set(custom_walls)
@@ -54,21 +105,65 @@ class VisualGridHuntGame:
         self.collision = False
 
     def get_percept(self) -> dict:
+        # Determine the cell directly ahead of the agent
+        x, y = self.agent_pos
+
+        if self.agent_direction == 'Up':
+            ahead = (x, y+1)
+        elif self.agent_direction == 'Down':
+            ahead = (x, y-1)
+        elif self.agent_direction == 'Left':
+            ahead = (x-1, y)
+        elif self.agent_direction == 'Right':
+            ahead = (x+1, y)
+
+        # Check whether the ahead cell is outside the grid
+        outside_grid = (
+            ahead[0] < 0 or ahead[0] >= self.width or
+            ahead[1] < 0 or ahead[1] >= self.height
+        )
+        # Wall ahead means either a wall or the edge of the grid
+        wall_ahead = outside_grid or ahead in self.walls
+
+        # Step 1.1: Return strictly local booleans
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
-            # 2.2 - new boolean sensor key : smells_toxin
-            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
-            'collision': self.collision,
-            'score': self.score,
-            'remaining_food': len(self.food_positions)
+            "wall_ahead": wall_ahead,
+            "food_here": tuple(self.agent_pos) in self.food_positions
         }
 
     def execute_action(self, action: str):
         self.steps += 1
         new_pos = list(self.agent_pos)
+
+        if action == "TurnLeft":
+            turns = {
+                "Up": "Left",
+                "Left": "Down",
+                "Down": "Right",
+                "Right": "Up"
+            }
+            self.agent_direction = turns[self.agent_direction]
+            return  # No movement, just a turn
+
+        if action == "Suck":
+            if tuple(self.agent_pos) in self.food_positions:
+                self.food_positions.remove(tuple(self.agent_pos))
+                self.score += 20
+            return # No movement, just sucking up food
+
+        if action == "MoveForward":
+            if self.agent_direction == "Up":
+                new_pos[1] += 1
+            elif self.agent_direction == "Down":
+                new_pos[1] -= 1
+            elif self.agent_direction == "Left":
+                new_pos[0] -= 1
+            elif self.agent_direction == "Right":
+                new_pos[0] += 1
+
+        # Update the direction the agent is facing (for older manual overrides if used)
+        if action in ["Up", "Down", "Left", "Right"]:
+            self.agent_direction = action
 
         if action == 'Up':
             new_pos[1] = min(self.height - 1, new_pos[1] + 1)
@@ -122,6 +217,9 @@ class GridGameGUI:
 
         self.env = VisualGridHuntGame(width=width, height=height, num_food=num_food, num_opponents=num_opponents,
                                       custom_walls=walls)
+        
+        # Instantiate the reflex agent
+        self.agent = SimpleReflexAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
@@ -176,7 +274,6 @@ class GridGameGUI:
                 outline="#581c87" 
             )
 
-
         for fx, fy in self.env.food_positions:
             offset = self.cell_size * 0.25
             x1 = fx * self.cell_size + offset
@@ -203,7 +300,10 @@ class GridGameGUI:
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
+                # Replaced random action with Agent decision logic
+                percept = self.env.get_percept()
+                action = self.agent.sense_and_act(percept)
+                
                 self.env.execute_action(action)
 
                 self.draw_grid()
@@ -215,7 +315,6 @@ class GridGameGUI:
                 self.btn.config(state="normal")
 
         step()
-
 
 if __name__ == "__main__":
     root = tk.Tk()
