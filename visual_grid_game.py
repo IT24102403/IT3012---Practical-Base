@@ -1,6 +1,7 @@
 # visual_grid_game.py
 import random
 import tkinter as tk
+from agent import SearchAgent 
 
 class SimpleReflexAgent:
     """A purely reactive agent that operates on condition-action rules with no memory."""
@@ -128,7 +129,11 @@ class VisualGridHuntGame:
         # Step 1.1: Return strictly local booleans
         return {
             "wall_ahead": wall_ahead,
-            "food_here": tuple(self.agent_pos) in self.food_positions
+            "food_here": tuple(self.agent_pos) in self.food_positions,
+            # Add three new keys to the dictionary to pass the global state to the agent:
+            "grid_size": (self.width, self.height),
+            "walls": list(self.walls),
+            "all_food": list(self.food_positions)
         }
 
     def execute_action(self, action: str):
@@ -205,7 +210,7 @@ class VisualGridHuntGame:
                 self.collision = True
 
     def is_done(self) -> bool:
-        return len(self.food_positions) == 0 or self.steps >= 60 or self.collision
+        return len(self.food_positions) == 0 or self.steps >= 100 or self.collision
 
 
 class GridGameGUI:
@@ -219,7 +224,7 @@ class GridGameGUI:
                                       custom_walls=walls)
         
         # Instantiate the reflex agent
-        self.agent = SimpleReflexAgent()
+        self.agent = SearchAgent()
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
